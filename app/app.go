@@ -71,14 +71,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.layout.body.Width = msg.Width
 		a.layout.body.Height = msg.Height - footerHeight
 		a.updateContent()
-		return a, nil // Return immediately after updating window size
 	}
+
 	a.layout.body, cmd = a.layout.body.Update(msg)
 	return a, cmd
 }
 
 func (a *App) View() string {
-	return fmt.Sprintf("%s\n%s", a.layout.body.View(), a.layout.footer)
+	footerStyle := lipgloss.NewStyle().
+		Width(a.layout.body.Width).
+		Align(lipgloss.Center)
+
+	return fmt.Sprintf("%s\n%s",
+		a.layout.body.View(),
+		footerStyle.Render(a.layout.footer))
 }
 
 func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -119,7 +125,7 @@ func (a *App) updateContent() {
 		content.WriteString(item + "\n")
 	}
 
-	renderedContent := listStyle.Render(content.String())
+	renderedContent := listStyle.Width(a.layout.body.Width).Align(lipgloss.Left).Render(content.String())
 	a.layout.body.SetContent(renderedContent)
 	a.layout.footer = fmt.Sprintf("Page: %d | Press 'n' for next, 'b' for previous, 'q' to quit", a.page)
 }
@@ -144,8 +150,7 @@ func (a *App) fetchPreviousPage() tea.Msg {
 
 var (
 	listStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, false).
-			MarginLeft(2).Align(lipgloss.Left).Width(100)
+			Border(lipgloss.NormalBorder(), false, false, false, false)
 
 	selectedItemStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("#AA55AA40")).
