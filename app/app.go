@@ -144,12 +144,11 @@ func (a *App) fetchPreviousPage() tea.Msg {
 
 var (
 	listStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, true, false, false).
-			BorderForeground(lipgloss.Color("240")).
-			MarginLeft(2)
+			Border(lipgloss.NormalBorder(), false, false, false, false).
+			MarginLeft(2).Align(lipgloss.Left).Width(100)
 
 	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("170")).
+				Background(lipgloss.Color("#AA55AA40")).
 				Bold(true)
 
 	regularItemStyle = lipgloss.NewStyle().
