@@ -2,18 +2,27 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/go-resty/resty/v2"
 )
 
+const footerHeight = 3
+
+type VerticalLayout struct {
+	body   viewport.Model
+	footer string
+}
+
 type App struct {
-	viewport viewport.Model
-	stories  []Story
-	cursor   int
-	page     int
-	client   *resty.Client
+	layout  VerticalLayout
+	stories []Story
+	cursor  int
+	page    int
+	client  *resty.Client
 }
 
 type Story struct {
@@ -30,11 +39,14 @@ type storiesMsg []Story
 
 func NewApp() *App {
 	return &App{
-		viewport: viewport.New(80, 20),
-		stories:  []Story{},
-		cursor:   0,
-		page:     1,
-		client:   resty.New(),
+		layout: VerticalLayout{
+			body:   viewport.New(100, 100), // Initialize with a large size, it will be adjusted later
+			footer: "Page: 1 | Press 'n' for next, 'b' for previous, 'q' to quit",
+		},
+		stories: []Story{},
+		cursor:  0,
+		page:    1,
+		client:  resty.New(),
 	}
 }
 
@@ -48,31 +60,25 @@ func (a *App) Init() tea.Cmd {
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return a.handleKeyPress(msg)
 	case storiesMsg:
 		a.stories = msg
-		return a, nil
+		a.updateContent()
 	case tea.WindowSizeMsg:
-		a.viewport.Width = msg.Width
-		a.viewport.Height = msg.Height - 1
-		return a, nil
+		a.layout.body.Width = msg.Width
+		a.layout.body.Height = msg.Height - footerHeight
+		a.updateContent()
+		return a, nil // Return immediately after updating window size
 	}
-	return a, nil
+	a.layout.body, cmd = a.layout.body.Update(msg)
+	return a, cmd
 }
 
 func (a *App) View() string {
-	var content string
-	for i, story := range a.stories {
-		cursor := " "
-		if a.cursor == i {
-			cursor = ">"
-		}
-		content += fmt.Sprintf("%s %s\n", cursor, story.Title)
-	}
-	a.viewport.SetContent(content)
-	return a.viewport.View()
+	return fmt.Sprintf("%s\n%s", a.layout.body.View(), a.layout.footer)
 }
 
 func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -82,31 +88,70 @@ func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if a.cursor > 0 {
 			a.cursor--
+			a.updateContent()
 		}
 	case "down", "j":
 		if a.cursor < len(a.stories)-1 {
 			a.cursor++
+			a.updateContent()
 		}
 	case "n":
 		a.page++
-		stories, err := fetchStories(a)
-		if err != nil {
-			a.page--
-			return a, nil
-		}
-		a.stories = stories
-		return a, nil
+		return a, a.fetchNextPage
 	case "b", "p":
 		if a.page > 1 {
 			a.page--
-			stories, err := fetchStories(a)
-			if err != nil {
-				a.page++
-				return a, nil
-			}
-			a.stories = stories
-			return a, nil
+			return a, a.fetchPreviousPage
 		}
 	}
 	return a, nil
 }
+
+func (a *App) updateContent() {
+	var content strings.Builder
+	for i, story := range a.stories {
+		item := fmt.Sprintf("%d. %s", i+1, story.Title)
+		if a.cursor == i {
+			item = selectedItemStyle.Render("> " + item)
+		} else {
+			item = regularItemStyle.Render("  " + item)
+		}
+		content.WriteString(item + "\n")
+	}
+
+	renderedContent := listStyle.Render(content.String())
+	a.layout.body.SetContent(renderedContent)
+	a.layout.footer = fmt.Sprintf("Page: %d | Press 'n' for next, 'b' for previous, 'q' to quit", a.page)
+}
+
+func (a *App) fetchNextPage() tea.Msg {
+	stories, err := fetchStories(a)
+	if err != nil {
+		a.page--
+		return nil
+	}
+	return storiesMsg(stories)
+}
+
+func (a *App) fetchPreviousPage() tea.Msg {
+	stories, err := fetchStories(a)
+	if err != nil {
+		a.page++
+		return nil
+	}
+	return storiesMsg(stories)
+}
+
+var (
+	listStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, true, false, false).
+			BorderForeground(lipgloss.Color("240")).
+			MarginLeft(2)
+
+	selectedItemStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("170")).
+				Bold(true)
+
+	regularItemStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("252"))
+)
