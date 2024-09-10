@@ -5,13 +5,11 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/go-resty/resty/v2"
 )
 
-func fetchStories(page int) ([]Story, error) {
-	client := resty.New()
-	url := fmt.Sprintf("https://lobste.rs/page/%d", page)
-	resp, err := client.R().Get(url)
+func fetchStories(app *App) ([]Story, error) {
+	url := fmt.Sprintf("https://lobste.rs/page/%d", app.page)
+	resp, err := app.client.R().Get(url)
 	if err != nil {
 		return nil, err
 	}

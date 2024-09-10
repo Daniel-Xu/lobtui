@@ -34,11 +34,12 @@ func NewApp() *App {
 		stories:  []Story{},
 		cursor:   0,
 		page:     1,
+		client:   resty.New(),
 	}
 }
 
 func (a *App) Init() tea.Cmd {
-	stories, err := fetchStories(a.page)
+	stories, err := fetchStories(a)
 	if err != nil {
 		return tea.Quit
 	}
@@ -88,17 +89,17 @@ func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "n":
 		a.page++
-		stories, err := fetchStories(a.page)
+		stories, err := fetchStories(a)
 		if err != nil {
 			a.page--
 			return a, nil
 		}
 		a.stories = stories
 		return a, nil
-	case "b":
+	case "b", "p":
 		if a.page > 1 {
 			a.page--
-			stories, err := fetchStories(a.page)
+			stories, err := fetchStories(a)
 			if err != nil {
 				a.page++
 				return a, nil
