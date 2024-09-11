@@ -1,7 +1,7 @@
 package app
 
 type item struct {
-	title, desc, url string
+	title, desc, url, votes string
 }
 
 func (i item) Title() string       { return i.title }

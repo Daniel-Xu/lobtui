@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -56,14 +58,22 @@ func (a *App) Init() tea.Cmd {
 
 func (a *App) setItems(stories []Story) {
 	items := make([]list.Item, len(stories))
+	sort.Slice(stories, func(i, j int) bool {
+		votesI, _ := strconv.Atoi(stories[i].Votes)
+		votesJ, _ := strconv.Atoi(stories[j].Votes)
+		return votesI > votesJ
+	})
+
 	for i, story := range stories {
 		items[i] = item{
 			title: fmt.Sprintf("%-2d %s", i+1, story.Title),
 			desc: fmt.Sprintf("Author: %s | Votes: %s | Comments: %s | Tags: %s",
 				story.Author, story.Votes, story.Comments, strings.Join(story.Tags, ", ")),
-			url: story.Link,
+			url:   story.Link,
+			votes: story.Votes,
 		}
 	}
+
 	a.list.SetItems(items)
 	a.list.ResetSelected()
 	a.list.Title = fmt.Sprintf("Lobsters Stories - Page %d", a.page)
