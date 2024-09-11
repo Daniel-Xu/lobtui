@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/pkg/browser"
 )
 
 // key handling for list item
@@ -15,8 +16,8 @@ type delegateKeyMap struct {
 func newDelegateKeyMap() *delegateKeyMap {
 	return &delegateKeyMap{
 		open: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "Open URL"),
+			key.WithKeys("enter", "o"),
+			key.WithHelp("enter/o", "Open URL"),
 		),
 	}
 }
@@ -26,9 +27,11 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 
 	d.UpdateFunc = func(msg tea.Msg, m *list.Model) tea.Cmd {
 		var title string
+		var url string
 
 		if i, ok := m.SelectedItem().(item); ok {
 			title = i.Title()
+			url = i.URL()
 		} else {
 			return nil
 		}
@@ -37,7 +40,12 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 		case tea.KeyMsg:
 			switch {
 			case key.Matches(msg, keys.open):
-				return m.NewStatusMessage("You chose " + title)
+				browser.Stdout = nil
+				browser.Stderr = nil
+				if err := browser.OpenURL(url); err != nil {
+					return m.NewStatusMessage("Failed to open URL: " + err.Error())
+				}
+				return m.NewStatusMessage("Opening " + title)
 			}
 		}
 
@@ -53,8 +61,7 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 	return d
 }
 
-// ey handling for list
-
+// key handling for list
 type listKeyMap struct {
 	nextPage key.Binding
 	prevPage key.Binding

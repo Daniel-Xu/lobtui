@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -58,7 +59,9 @@ func (a *App) setItems(stories []Story) {
 	for i, story := range stories {
 		items[i] = item{
 			title: fmt.Sprintf("%-2d %s", i+1, story.Title),
-			desc:  fmt.Sprintf("Author: %s | Votes: %d | Comments: %s", story.Author, story.Votes, story.CommentCount),
+			desc: fmt.Sprintf("Author: %s | Votes: %s | Comments: %s | Tags: %s",
+				story.Author, story.Votes, story.Comments, strings.Join(story.Tags, ", ")),
+			url: story.Link,
 		}
 	}
 	a.list.SetItems(items)

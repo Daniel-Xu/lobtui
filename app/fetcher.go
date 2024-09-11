@@ -20,10 +20,28 @@ func fetchStories(app *App) ([]Story, error) {
 	}
 
 	var stories []Story
+
 	doc.Find(".story").Each(func(i int, s *goquery.Selection) {
-		title := s.Find(".link a").Text()
+		title := strings.TrimSpace(s.Find(".link a").Text())
 		url, _ := s.Find(".link a").Attr("href")
-		stories = append(stories, Story{Title: title, Link: url})
+		url = strings.TrimSpace(url)
+		votes := strings.TrimSpace(s.Find(".voters .score").Text())
+		author := strings.TrimSpace(s.Find("a.u-author").Text())
+		comments := strings.TrimSpace(s.Find(".comments_label a").Text())
+
+		var tags []string
+		s.Find(".tags a").Each(func(i int, s *goquery.Selection) {
+			tags = append(tags, s.Text())
+		})
+
+		stories = append(stories, Story{
+			Title:    title,
+			Link:     url,
+			Comments: comments,
+			Author:   author,
+			Votes:    votes,
+			Tags:     tags,
+		})
 	})
 
 	return stories, nil
