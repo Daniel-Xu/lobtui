@@ -2,132 +2,104 @@ package app
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-resty/resty/v2"
 )
 
-const footerHeight = 3
-
-type VerticalLayout struct {
-	body   viewport.Model
-	footer string
-}
-
+// application state
 type App struct {
-	layout  VerticalLayout
 	stories []Story
-	cursor  int
 	page    int
 	client  *resty.Client
+	list    list.Model
+	keys    *listKeyMap
 }
-
-type Story struct {
-	Title        string
-	Link         string
-	Author       string
-	Tags         []string
-	Votes        int
-	CommentCount string
-	CommentLink  string
-}
-
-type storiesMsg []Story
 
 func NewApp() *App {
+	delegateKeys := newDelegateKeyMap()
+	delegate := newItemDelegate(delegateKeys)
+
+	storyList := list.New([]list.Item{}, delegate, 0, 0)
+	storyList.SetShowStatusBar(false)
+	storyList.SetFilteringEnabled(false)
+	listKeys := newListKeyMap()
+
+	storyList.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.nextPage,
+			listKeys.prevPage,
+		}
+	}
+
 	return &App{
-		layout: VerticalLayout{
-			body:   viewport.New(100, 100), // Initialize with a large size, it will be adjusted later
-			footer: "Page: 1 | Press 'n' for next, 'b' for previous, 'q' to quit",
-		},
-		stories: []Story{},
-		cursor:  0,
-		page:    1,
-		client:  resty.New(),
+		page:   1,
+		client: resty.New(),
+		list:   storyList,
+		keys:   listKeys,
 	}
 }
 
 func (a *App) Init() tea.Cmd {
 	stories, err := fetchStories(a)
+	a.setItems(stories)
+
 	if err != nil {
 		return tea.Quit
 	}
-	a.stories = stories
 	return nil
 }
 
+func (a *App) setItems(stories []Story) {
+	items := make([]list.Item, len(stories))
+	for i, story := range stories {
+		items[i] = item{
+			title: fmt.Sprintf("%-2d %s", i+1, story.Title),
+			desc:  fmt.Sprintf("Author: %s | Votes: %d | Comments: %s", story.Author, story.Votes, story.CommentCount),
+		}
+	}
+	a.list.SetItems(items)
+	a.list.ResetSelected()
+	a.list.Title = fmt.Sprintf("Lobsters Stories - Page %d", a.page)
+}
+
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return a.handleKeyPress(msg)
+		switch {
+		case key.Matches(msg, a.keys.nextPage):
+			a.page++
+			return a, a.fetchNextPage
+
+		case key.Matches(msg, a.keys.prevPage):
+			if a.page > 1 {
+				a.page--
+				return a, a.fetchPreviousPage
+			}
+		}
+
 	case storiesMsg:
-		a.stories = msg
-		a.updateContent()
+		a.setItems(msg)
+
 	case tea.WindowSizeMsg:
-		a.layout.body.Width = msg.Width
-		a.layout.body.Height = msg.Height - footerHeight
-		a.updateContent()
+		h, v := docStyle.GetFrameSize()
+		a.list.SetSize(msg.Width-h, msg.Height-v)
 	}
 
-	a.layout.body, cmd = a.layout.body.Update(msg)
-	return a, cmd
+	newListModel, cmd := a.list.Update(msg)
+	a.list = newListModel
+	cmds = append(cmds, cmd)
+
+	return a, tea.Batch(cmds...)
 }
 
 func (a *App) View() string {
-	footerStyle := lipgloss.NewStyle().
-		Width(a.layout.body.Width).
-		Align(lipgloss.Center)
-
-	return fmt.Sprintf("%s\n%s",
-		a.layout.body.View(),
-		footerStyle.Render(a.layout.footer))
-}
-
-func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "ctrl+c":
-		return a, tea.Quit
-	case "up", "k":
-		if a.cursor > 0 {
-			a.cursor--
-			a.updateContent()
-		}
-	case "down", "j":
-		if a.cursor < len(a.stories)-1 {
-			a.cursor++
-			a.updateContent()
-		}
-	case "n":
-		a.page++
-		return a, a.fetchNextPage
-	case "b", "p":
-		if a.page > 1 {
-			a.page--
-			return a, a.fetchPreviousPage
-		}
-	}
-	return a, nil
-}
-
-func (a *App) updateContent() {
-	var content strings.Builder
-	for i, story := range a.stories {
-		item := fmt.Sprintf("%d. %s", i+1, story.Title)
-		if a.cursor == i {
-			item = selectedItemStyle.Render("> " + item)
-		} else {
-			item = regularItemStyle.Render("  " + item)
-		}
-		content.WriteString(item + "\n")
-	}
-
-	renderedContent := listStyle.Width(a.layout.body.Width).Align(lipgloss.Left).Render(content.String())
-	a.layout.body.SetContent(renderedContent)
-	a.layout.footer = fmt.Sprintf("Page: %d | Press 'n' for next, 'b' for previous, 'q' to quit", a.page)
+	return docStyle.Render(a.list.View())
 }
 
 func (a *App) fetchNextPage() tea.Msg {
@@ -149,13 +121,5 @@ func (a *App) fetchPreviousPage() tea.Msg {
 }
 
 var (
-	listStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, false)
-
-	selectedItemStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#AA55AA40")).
-				Bold(true)
-
-	regularItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("252"))
+	docStyle = lipgloss.NewStyle().Margin(1, 2)
 )
